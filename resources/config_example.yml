@@ -1,0 +1,8 @@
+token: "TOKEN"
+group: "-GROUP_ID"
+debug: false
+logrus:
+  log_level: 4
+  to_file: true
+  to_json: false
+  log_dir: "logs/logs.log"
