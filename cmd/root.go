@@ -18,9 +18,9 @@ var cfgFile string
 var cnfg config.Config
 
 var rootCmd = &cobra.Command{
-	Use:   "boilerplate",
-	Short: "A brief description of your application",
-	Long:  `A longer description`,
+	Use:   "QuinoaTgBot",
+	Short: "Telegram-bot for Quinoa project",
+	Long:  `Uses REST API to communicate with server`,
 	Run: func(cmd *cobra.Command, args []string) {
 		b := bot.New(cnfg)
 		b.Work()

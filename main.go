@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	fmt.Println("Quinoa-tg-bot works!")
+	fmt.Println("QuinoaTgBot works!")
 	cmd.Execute()
 }
