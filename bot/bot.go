@@ -2,6 +2,7 @@ package bot
 
 import (
 	"log"
+	"strings"
 
 	"github.com/s-vvardenfell/QuinoaTgBot/client"
 	"github.com/s-vvardenfell/QuinoaTgBot/conditions"
@@ -14,8 +15,7 @@ import (
 type QuinoaTgBot struct {
 	tg     *tgbotapi.BotAPI
 	client *client.Client
-	cnfg   config.Config //нужно ли мне хранить весь конфиг? или только номер группы понадобится?
-	//если общаться с ботом в личке, группа не нужна!
+	cnfg   config.Config
 }
 
 func New(cnfg config.Config) *QuinoaTgBot {
@@ -61,24 +61,19 @@ func (b *QuinoaTgBot) commandsHandling() {
 	updates := b.tg.GetUpdatesChan(u)
 
 	for update := range updates {
-		if update.Message == nil { // ignore any non-Message updates
+		if update.Message == nil {
 			continue
 		}
 
-		if !update.Message.IsCommand() { // ignore any non-command Messages
+		if !update.Message.IsCommand() {
 			continue
 		}
 
-		// Create a new MessageConfig. We don't have text yet,
-		// so we leave it empty.
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
 
-		// Extract the command from the Message.
 		switch update.Message.Command() {
 		case "help":
-			msg.Text = "I understand /sayhi and /status."
-		case "sayhi":
-			msg.Text = "Hi :)"
+			msg.Text = "I understand /status, /search, /cancel (breaking search process)"
 		case "status":
 			msg.Text = "I'm ok."
 		case "search":
@@ -97,36 +92,50 @@ func (b *QuinoaTgBot) processSearchCommand(
 	updates tgbotapi.UpdatesChannel, update tgbotapi.Update) string {
 
 	cnd := conditions.Conditions{}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Фильм или сериал?")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Film or series?")
 	msg.ParseMode = tgbotapi.ModeMarkdown
-	b.tg.Send(msg) //TODO _, err :=
+	if _, err := b.tg.Send(msg); err != nil {
+		logrus.Fatal(err)
+	}
 
 	for update := range updates {
+
+		switch update.Message.Command() {
+		case "cancel":
+			return "Ok, breaking search"
+		}
+
 		if cnd.Type == "" {
 			cnd.Type = update.Message.Text
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			// msg.ReplyToMessageID = update.Message.MessageID
-			msg.Text = "Какой жанр поискать?"
-			b.tg.Send(msg)
+			msg.Text = "List the genres separated by a space:"
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Fatal(err)
+			}
 			continue
 		} else if cnd.Genres == nil {
-			//можно всё же отправлять клавиатуру с жанрами или галочками отметить как-то?
-			//надо будет распарсить если несколько жанров и предупредить юзера
-			//"перечисли жанры через пробел"
-			cnd.Genres = append(cnd.Genres, update.Message.Text)
+			cnd.Genres = strings.Fields(update.Message.Text)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			msg.Text = `Specify the year of issue "from":`
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Fatal(err)
+			}
+			continue
+		} else if cnd.StartYear == "" {
+			cnd.StartYear = update.Message.Text
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			msg.Text = `Specify the year of issue "before":`
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Fatal(err)
+			}
+			continue
+		} else if cnd.EndYear == "" {
+			cnd.EndYear = update.Message.Text
 			break
 		} else {
 			break
 		}
 	}
-	// return "no data"
-	return b.client.FilmsByConditions(conditions.Conditions{
-		Type: cnd.Type,
-	})
 
-	/*
-		спросить жанр/жанры
-		спросить сериал или фильм или всё равно
-		или мб прислать клавиатуру? хотя это не важно для целей проекта и для client
-	*/
+	return b.client.FilmsByConditions(cnd)
 }
