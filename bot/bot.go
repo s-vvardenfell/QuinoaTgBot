@@ -1,8 +1,11 @@
 package bot
 
 import (
-	"log"
+	"fmt"
+	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/s-vvardenfell/QuinoaTgBot/client"
 	"github.com/s-vvardenfell/QuinoaTgBot/conditions"
@@ -10,6 +13,10 @@ import (
 	"github.com/sirupsen/logrus"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+const (
+	sendMsgErr = "error while sending msg to client: "
 )
 
 type QuinoaTgBot struct {
@@ -34,24 +41,6 @@ func New(cnfg config.Config) *QuinoaTgBot {
 
 func (b *QuinoaTgBot) Work() {
 	b.commandsHandling()
-}
-
-func (b *QuinoaTgBot) answerMsg() {
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := b.tg.GetUpdatesChan(u)
-
-	for update := range updates {
-		if update.Message != nil { // If we got a message
-			log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			msg.ReplyToMessageID = update.Message.MessageID
-
-			b.tg.Send(msg)
-		}
-	}
 }
 
 func (b *QuinoaTgBot) commandsHandling() {
@@ -83,7 +72,7 @@ func (b *QuinoaTgBot) commandsHandling() {
 		}
 
 		if _, err := b.tg.Send(msg); err != nil {
-			log.Panic(err)
+			logrus.Error(sendMsgErr, err)
 		}
 	}
 }
@@ -95,7 +84,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Film or series?")
 	msg.ParseMode = tgbotapi.ModeMarkdown
 	if _, err := b.tg.Send(msg); err != nil {
-		logrus.Fatal(err)
+		logrus.Error(sendMsgErr, err)
 	}
 
 	for update := range updates {
@@ -110,26 +99,42 @@ func (b *QuinoaTgBot) processSearchCommand(
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 			msg.Text = "List the genres separated by a space:"
 			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Fatal(err)
+				logrus.Error(sendMsgErr, err)
 			}
 			continue
 		} else if cnd.Genres == nil {
 			cnd.Genres = strings.Fields(update.Message.Text)
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			msg.Text = `Specify the year of issue "from":`
+			msg.Text = `Specify the year of issue "from" (since 1900):`
 			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Fatal(err)
+				logrus.Error(sendMsgErr, err)
 			}
 			continue
 		} else if cnd.StartYear == "" {
+			if !CheckYear(update.Message.Text) {
+				msg.Text = `Wrong year format or value, please, try again`
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+				continue
+			}
+
 			cnd.StartYear = update.Message.Text
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			msg.Text = `Specify the year of issue "before":`
+			msg.Text = fmt.Sprintf(`Specify the year of issue "before" (up to %d):`, time.Now().Year())
 			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Fatal(err)
+				logrus.Error(sendMsgErr, err)
 			}
 			continue
 		} else if cnd.EndYear == "" {
+			if !CheckYear(update.Message.Text) {
+				msg.Text = `Wrong year format or value, please, try again`
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+				continue
+			}
+
 			cnd.EndYear = update.Message.Text
 			break
 		} else {
@@ -138,4 +143,22 @@ func (b *QuinoaTgBot) processSearchCommand(
 	}
 
 	return b.client.FilmsByConditions(cnd)
+}
+
+func CheckYear(y string) bool {
+	d, err := strconv.Atoi(y)
+	if err != nil {
+		return false
+	}
+
+	if d >= 1900 && d <= time.Now().Year() {
+		for _, d := range y {
+			if !unicode.IsDigit(d) {
+				return false
+			}
+		}
+	} else {
+		return false
+	}
+	return true
 }
