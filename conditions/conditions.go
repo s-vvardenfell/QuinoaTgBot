@@ -1,8 +1,10 @@
 package conditions
 
 type Conditions struct {
-	Genres    []string
 	Type      string
+	Genres    []string
 	StartYear string
 	EndYear   string
+	Countries []string
+	Keyword   string
 }

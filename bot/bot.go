@@ -95,48 +95,136 @@ func (b *QuinoaTgBot) processSearchCommand(
 		}
 
 		if cnd.Type == "" {
-			cnd.Type = update.Message.Text
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.Type = "no"
+				msg.Text = "Ok, skipping this question"
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+			default:
+				cnd.Type = update.Message.Text
+			}
+
 			msg.Text = "List the genres separated by a space:"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
+
 			continue
+
 		} else if cnd.Genres == nil {
-			cnd.Genres = strings.Fields(update.Message.Text)
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.Genres = []string{"no"}
+				msg.Text = "Ok, skipping this question"
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+			default:
+				cnd.Genres = strings.Fields(update.Message.Text)
+			}
+
 			msg.Text = `Specify the year of issue "from" (since 1900):`
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
 			continue
+
 		} else if cnd.StartYear == "" {
-			if !CheckYear(update.Message.Text) {
-				msg.Text = `Wrong year format or value, please, try again`
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.StartYear = "no"
+				msg.Text = "Ok, skipping this question"
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
-				continue
+			default:
+				if !CheckYear(update.Message.Text) {
+					msg.Text = `Wrong year format or value, please, try again`
+					if _, err := b.tg.Send(msg); err != nil {
+						logrus.Error(sendMsgErr, err)
+					}
+					continue
+				}
+				cnd.StartYear = update.Message.Text
 			}
 
-			cnd.StartYear = update.Message.Text
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 			msg.Text = fmt.Sprintf(`Specify the year of issue "before" (up to %d):`, time.Now().Year())
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
 			continue
+
 		} else if cnd.EndYear == "" {
-			if !CheckYear(update.Message.Text) {
-				msg.Text = `Wrong year format or value, please, try again`
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.EndYear = "no"
+				msg.Text = "Ok, skipping this question"
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
-				continue
+			default:
+				if !CheckYear(update.Message.Text) {
+					msg.Text = `Wrong year format or value, please, try again`
+					if _, err := b.tg.Send(msg); err != nil {
+						logrus.Error(sendMsgErr, err)
+					}
+					continue
+				}
+
+				cnd.EndYear = update.Message.Text
 			}
 
-			cnd.EndYear = update.Message.Text
+			msg.Text = "Specify keywords (like film name etc, separated by space):"
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Error(sendMsgErr, err)
+			}
+			continue
+
+		} else if cnd.Keyword == "" {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.Keyword = "no"
+				msg.Text = "Ok, skipping this question"
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+			default:
+				cnd.Keyword = update.Message.Text
+			}
+
+			msg.Text = "List the countries separated by a space:"
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Error(sendMsgErr, err)
+			}
+			continue
+
+		} else if cnd.Countries == nil {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+			switch update.Message.Command() {
+			case "skip":
+				cnd.Countries = []string{"no"}
+				msg.Text = "Ok, skipping this question"
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+			default:
+				cnd.Countries = strings.Fields(update.Message.Text)
+			}
 			break
+
 		} else {
 			break
 		}
