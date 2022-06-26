@@ -1,3 +1,4 @@
 resources/config.yml
 logs/*.log
 TODO
+generated/

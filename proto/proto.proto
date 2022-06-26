@@ -1,0 +1,54 @@
+syntax= "proto3";
+
+package generated;
+option go_package = "./generated";
+
+message Conditions{  
+    string Type = 1;
+	repeated string Genres = 2;
+	string StartYear = 3;
+	string EndYear = 4;
+	repeated string Countries = 5;
+	string Keyword = 6;
+}
+
+message ParsedResults{
+    repeated ParsedData Data = 1;
+}
+
+message ParsedData{
+    string Name = 1;
+	string Ref = 2;
+	string Img = 3;
+}
+
+message Key{
+    string Key = 1;
+}
+
+message Value{
+    string Val = 1;
+}
+
+message Ok{
+    bool Ok = 1;
+}
+
+message Input{  
+    string Key = 1;
+    string Val = 2;
+    int64 Exp = 3;
+}
+
+service RedisCacheService {
+    rpc Get(Key) returns (Value){}
+    rpc Set(Input) returns (Ok){}
+}
+
+service MainService {
+    rpc GetParsedData(Conditions) returns (ParsedResults){}
+}
+
+service ParserService {
+    rpc GetParsedData(Conditions) returns (ParsedResults){}
+}
