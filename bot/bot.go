@@ -21,7 +21,7 @@ const (
 
 type QuinoaTgBot struct {
 	tg     *tgbotapi.BotAPI
-	client *client.Client
+	client *client.QuinoaTgBotClient
 	cnfg   config.Config
 }
 
@@ -34,7 +34,7 @@ func New(cnfg config.Config) *QuinoaTgBot {
 	bot.Debug = cnfg.Debug
 	return &QuinoaTgBot{
 		tg:     bot,
-		client: client.New(),
+		client: client.New(cnfg.ServerHost, cnfg.ServerPort),
 		cnfg:   cnfg,
 	}
 }
@@ -146,7 +146,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 					logrus.Error(sendMsgErr, err)
 				}
 			default:
-				if !CheckYear(update.Message.Text) {
+				if !checkYear(update.Message.Text) {
 					msg.Text = `Wrong year format or value, please, try again`
 					if _, err := b.tg.Send(msg); err != nil {
 						logrus.Error(sendMsgErr, err)
@@ -173,7 +173,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 					logrus.Error(sendMsgErr, err)
 				}
 			default:
-				if !CheckYear(update.Message.Text) {
+				if !checkYear(update.Message.Text) {
 					msg.Text = `Wrong year format or value, please, try again`
 					if _, err := b.tg.Send(msg); err != nil {
 						logrus.Error(sendMsgErr, err)
@@ -233,13 +233,13 @@ func (b *QuinoaTgBot) processSearchCommand(
 	return b.client.FilmsByConditions(cnd)
 }
 
-func CheckYear(y string) bool {
+func checkYear(y string) bool {
 	d, err := strconv.Atoi(y)
 	if err != nil {
 		return false
 	}
 
-	if d >= 1900 && d <= time.Now().Year() {
+	if d >= 1900 && d <= time.Now().Year()+1 {
 		for _, d := range y {
 			if !unicode.IsDigit(d) {
 				return false
