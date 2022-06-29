@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 
 const (
 	sendMsgErr = "error while sending msg to client: "
+	msgSkip    = "Ок, пропустим этот вопрос"
 )
 
 type QuinoaTgBot struct {
@@ -49,6 +52,7 @@ func (b *QuinoaTgBot) commandsHandling() {
 
 	updates := b.tg.GetUpdatesChan(u)
 
+loop:
 	for update := range updates {
 		if update.Message == nil {
 			continue
@@ -62,13 +66,49 @@ func (b *QuinoaTgBot) commandsHandling() {
 
 		switch update.Message.Command() {
 		case "help":
-			msg.Text = "I understand /status, /search, /cancel (breaking search process)"
+			msg.Text = "Я понимаю /status, /search, /cancel (прерываение процедуры поиска)"
 		case "status":
-			msg.Text = "I'm ok."
+			msg.Text = "Всё в порядке"
+		case "cancel":
+			msg.Text = "Эта команда прерывает процесс выбора фильма команды /search"
 		case "search":
-			msg.Text = b.processSearchCommand(updates, update)
+			cnd, err := b.processSearchCommand(updates, update)
+			if err != nil {
+				msg.Text = err.Error()
+				break
+			}
+
+			msg.Text = "Поиск, ожидайте..."
+			if _, err := b.tg.Send(msg); err != nil {
+				logrus.Error(sendMsgErr, err)
+			}
+
+			searchResults, err := b.client.FilmsByConditions(cnd)
+			if err != nil {
+				msg.Text = err.Error()
+				break
+			}
+
+			//TODO можно отправилять неск картинок с описанием пачками по 10 например
+			for i := range searchResults {
+				img, err := base64.StdEncoding.DecodeString(searchResults[i].Img)
+				if err != nil {
+					msg.Text = err.Error()
+				}
+
+				file := tgbotapi.FileBytes{
+					Name:  searchResults[i].Name,
+					Bytes: img,
+				}
+
+				msg := tgbotapi.NewPhoto(update.Message.Chat.ID, file)
+				if _, err := b.tg.Send(msg); err != nil {
+					logrus.Error(sendMsgErr, err)
+				}
+			}
+			continue loop
 		default:
-			msg.Text = "I don't know that command"
+			msg.Text = "Я не знаю такой команды"
 		}
 
 		if _, err := b.tg.Send(msg); err != nil {
@@ -77,11 +117,12 @@ func (b *QuinoaTgBot) commandsHandling() {
 	}
 }
 
+//TODO обработать возврат ошибок
 func (b *QuinoaTgBot) processSearchCommand(
-	updates tgbotapi.UpdatesChannel, update tgbotapi.Update) string {
+	updates tgbotapi.UpdatesChannel, update tgbotapi.Update) (conditions.Conditions, error) {
 
 	cnd := conditions.Conditions{}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Film or series?")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Фильм или сериал?")
 	msg.ParseMode = tgbotapi.ModeMarkdown
 	if _, err := b.tg.Send(msg); err != nil {
 		logrus.Error(sendMsgErr, err)
@@ -91,7 +132,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 
 		switch update.Message.Command() {
 		case "cancel":
-			return "Ok, breaking search"
+			return conditions.Conditions{}, errors.New("ок, прекращаю поиск")
 		}
 
 		if cnd.Type == "" {
@@ -100,7 +141,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.Type = "no"
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
@@ -108,7 +149,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.Type = update.Message.Text
 			}
 
-			msg.Text = "List the genres separated by a space:"
+			msg.Text = "Перечислите жанры через пробел:"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -121,7 +162,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.Genres = []string{"no"}
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
@@ -129,7 +170,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.Genres = strings.Fields(update.Message.Text)
 			}
 
-			msg.Text = `Specify the year of issue "from" (since 1900):`
+			msg.Text = `Укажите год начала поиска (минимум 1900):`
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -141,13 +182,13 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.StartYear = "no"
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
 			default:
 				if !checkYear(update.Message.Text) {
-					msg.Text = `Wrong year format or value, please, try again`
+					msg.Text = "Неправильный формат или значение, попробуйте снова"
 					if _, err := b.tg.Send(msg); err != nil {
 						logrus.Error(sendMsgErr, err)
 					}
@@ -156,7 +197,8 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.StartYear = update.Message.Text
 			}
 
-			msg.Text = fmt.Sprintf(`Specify the year of issue "before" (up to %d):`, time.Now().Year())
+			msg.Text = fmt.Sprintf(
+				"Укажите год окончания поиска (максимум %d):", time.Now().Year()+1)
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -168,13 +210,13 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.EndYear = "no"
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
 			default:
 				if !checkYear(update.Message.Text) {
-					msg.Text = `Wrong year format or value, please, try again`
+					msg.Text = "Неправильный формат или значение, попробуйте снова"
 					if _, err := b.tg.Send(msg); err != nil {
 						logrus.Error(sendMsgErr, err)
 					}
@@ -184,7 +226,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.EndYear = update.Message.Text
 			}
 
-			msg.Text = "Specify keywords (like film name etc, separated by space):"
+			msg.Text = "Укажите ключевые слова через пробел (например, название фильма или имя актера):"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -196,7 +238,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.Keyword = "no"
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
@@ -204,7 +246,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.Keyword = update.Message.Text
 			}
 
-			msg.Text = "List the countries separated by a space:"
+			msg.Text = "Перечислите страны через пробел:"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -216,7 +258,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 			switch update.Message.Command() {
 			case "skip":
 				cnd.Countries = []string{"no"}
-				msg.Text = "Ok, skipping this question"
+				msg.Text = msgSkip
 				if _, err := b.tg.Send(msg); err != nil {
 					logrus.Error(sendMsgErr, err)
 				}
@@ -230,7 +272,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 		}
 	}
 
-	return b.client.FilmsByConditions(cnd)
+	return cnd, nil
 }
 
 func checkYear(y string) bool {

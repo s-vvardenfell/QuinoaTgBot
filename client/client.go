@@ -2,7 +2,9 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/s-vvardenfell/QuinoaTgBot/conditions"
@@ -10,6 +12,15 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
+
+var ErrNoResults = errors.New("по вашему запросу не найдено подходящих результатов")
+var ErrSomeError = errors.New("во время обработки запроса произошла непредвиденная ошибка")
+
+type ParsingResults struct {
+	Name string
+	Ref  string
+	Img  string
+}
 
 type QuinoaTgBotClient struct {
 	generated.MainServiceClient
@@ -25,7 +36,8 @@ func New(host, port string) *QuinoaTgBotClient {
 	}
 }
 
-func (c *QuinoaTgBotClient) FilmsByConditions(cnd conditions.Conditions) string {
+func (c *QuinoaTgBotClient) FilmsByConditions(
+	cnd conditions.Conditions) ([]ParsingResults, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -39,7 +51,21 @@ func (c *QuinoaTgBotClient) FilmsByConditions(cnd conditions.Conditions) string 
 	})
 
 	if err != nil {
-		return "Во время выполнения запроса произошла ошибка"
+		if strings.Contains(err.Error(), "no results found") {
+			return nil, ErrNoResults
+		}
+		return nil, ErrSomeError
 	}
-	return resFromServ.String()
+
+	res := make([]ParsingResults, 0, len(resFromServ.Data))
+
+	for i := range resFromServ.Data {
+		res = append(res, ParsingResults{
+			Name: resFromServ.Data[i].Name,
+			Ref:  resFromServ.Data[i].Ref,
+			Img:  resFromServ.Data[i].Img,
+		})
+	}
+
+	return res, nil
 }

@@ -34,7 +34,7 @@ message Ok{
     bool Ok = 1;
 }
 
-message Input{  
+message Input{ 
     string Key = 1;
     string Val = 2;
     int64 Exp = 3;
@@ -50,5 +50,5 @@ service MainService {
 }
 
 service ParserService {
-    rpc GetParsedData(Conditions) returns (ParsedResults){}
+    rpc ParseData(Conditions) returns (ParsedResults){}
 }
