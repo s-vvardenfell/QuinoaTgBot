@@ -89,11 +89,15 @@ loop:
 				break
 			}
 
-			//TODO можно отправилять неск картинок с описанием пачками по 10 например
+			mg := tgbotapi.MediaGroupConfig{
+				ChatID: update.Message.Chat.ID,
+			}
+
 			for i := range searchResults {
 				img, err := base64.StdEncoding.DecodeString(searchResults[i].Img)
 				if err != nil {
 					msg.Text = err.Error()
+					break //точно ли?
 				}
 
 				file := tgbotapi.FileBytes{
@@ -101,11 +105,22 @@ loop:
 					Bytes: img,
 				}
 
-				msg := tgbotapi.NewPhoto(update.Message.Chat.ID, file)
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
+				cap := fmt.Sprintf("%s\n%s", searchResults[i].Name, searchResults[i].Ref)
+
+				media := tgbotapi.InputMediaPhoto{
+					BaseInputMedia: tgbotapi.BaseInputMedia{
+						Type:    "photo",
+						Media:   file,
+						Caption: cap,
+					},
 				}
+				mg.Media = append(mg.Media, media)
 			}
+
+			if _, err := b.tg.SendMediaGroup(mg); err != nil {
+				logrus.Error(sendMsgErr, err)
+			}
+
 			continue loop
 		default:
 			msg.Text = "Я не знаю такой команды"
@@ -122,7 +137,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 	updates tgbotapi.UpdatesChannel, update tgbotapi.Update) (conditions.Conditions, error) {
 
 	cnd := conditions.Conditions{}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Фильм или сериал?")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Фильм или сериал? (или /skip)")
 	msg.ParseMode = tgbotapi.ModeMarkdown
 	if _, err := b.tg.Send(msg); err != nil {
 		logrus.Error(sendMsgErr, err)
@@ -149,7 +164,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.Type = update.Message.Text
 			}
 
-			msg.Text = "Перечислите жанры через пробел:"
+			msg.Text = "Перечислите жанры через пробел (или /skip):"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -170,7 +185,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.Genres = strings.Fields(update.Message.Text)
 			}
 
-			msg.Text = `Укажите год начала поиска (минимум 1900):`
+			msg.Text = `Укажите год начала поиска (минимум 1900) (или /skip):`
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -198,7 +213,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 			}
 
 			msg.Text = fmt.Sprintf(
-				"Укажите год окончания поиска (максимум %d):", time.Now().Year()+1)
+				"Укажите год окончания поиска (максимум %d) (или /skip):", time.Now().Year()+1)
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
@@ -226,7 +241,7 @@ func (b *QuinoaTgBot) processSearchCommand(
 				cnd.EndYear = update.Message.Text
 			}
 
-			msg.Text = "Укажите ключевые слова через пробел (например, название фильма или имя актера):"
+			msg.Text = "Укажите ключевые слова через пробел (например, название фильма или имя актера) (или /skip):"
 			if _, err := b.tg.Send(msg); err != nil {
 				logrus.Error(sendMsgErr, err)
 			}
