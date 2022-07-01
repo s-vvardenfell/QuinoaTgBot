@@ -18,9 +18,19 @@ import (
 )
 
 const (
-	sendMsgErr = "error while sending msg to client: "
-	msgSkip    = "Ок, пропустим этот вопрос"
+	sendMsgErr      = "error while sending msg to client: "
+	msgSkip         = "Ок, пропустим этот вопрос"
+	qType           = "Фильм или сериал? (или /skip)"
+	qGenres         = "Перечислите жанры через пробел (или /skip):"
+	qYearsBeg       = "Укажите год начала поиска (минимум 1900) (или /skip):"
+	qKeywords       = "Укажите ключевые слова через пробел (например, название фильма или имя актера) (или /skip):"
+	qCountries      = "Перечислите страны через пробел (или /skip):"
+	msgWrongFormat  = "Неправильный формат или значение, попробуйте снова"
+	msgWrongCommand = "Я не знаю такой команды"
 )
+
+var qYearsEnd = fmt.Sprintf("Укажите год окончания поиска (максимум %d) (или /skip):", time.Now().Year()+1)
+var errBreak = errors.New("ок, прекращаю поиск")
 
 type QuinoaTgBot struct {
 	tg     *tgbotapi.BotAPI
@@ -66,11 +76,11 @@ loop:
 
 		switch update.Message.Command() {
 		case "help":
-			msg.Text = "Я понимаю /status, /search, /cancel (прерываение процедуры поиска)"
+			msg.Text = "Я понимаю /status, /search, /cancel (прерывание поиска)"
 		case "status":
 			msg.Text = "Всё в порядке"
 		case "cancel":
-			msg.Text = "Эта команда прерывает процесс выбора фильма команды /search"
+			msg.Text = "Эта команда прерывает процесс поиска фильмов командой /search"
 		case "search":
 			cnd, err := b.processSearchCommand(updates, update)
 			if err != nil {
@@ -79,9 +89,7 @@ loop:
 			}
 
 			msg.Text = "Поиск, ожидайте..."
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
+			b.sendMsg(msg)
 
 			searchResults, err := b.client.FilmsByConditions(cnd)
 			if err != nil {
@@ -97,7 +105,7 @@ loop:
 				img, err := base64.StdEncoding.DecodeString(searchResults[i].Img)
 				if err != nil {
 					msg.Text = err.Error()
-					break //точно ли?
+					break
 				}
 
 				file := tgbotapi.FileBytes{
@@ -123,21 +131,18 @@ loop:
 
 			continue loop
 		default:
-			msg.Text = "Я не знаю такой команды"
+			msg.Text = msgWrongCommand
 		}
 
-		if _, err := b.tg.Send(msg); err != nil {
-			logrus.Error(sendMsgErr, err)
-		}
+		b.sendMsg(msg)
 	}
 }
 
-//TODO обработать возврат ошибок
 func (b *QuinoaTgBot) processSearchCommand(
 	updates tgbotapi.UpdatesChannel, update tgbotapi.Update) (conditions.Conditions, error) {
 
 	cnd := conditions.Conditions{}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Фильм или сериал? (или /skip)")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, qType)
 	msg.ParseMode = tgbotapi.ModeMarkdown
 	if _, err := b.tg.Send(msg); err != nil {
 		logrus.Error(sendMsgErr, err)
@@ -147,138 +152,116 @@ func (b *QuinoaTgBot) processSearchCommand(
 
 		switch update.Message.Command() {
 		case "cancel":
-			return conditions.Conditions{}, errors.New("ок, прекращаю поиск")
+			return conditions.Conditions{}, errBreak
 		}
 
-		if cnd.Type == "" {
+		if !cnd.Check.Type {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.Type = "no"
+				cnd.Check.Type = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				cnd.Type = update.Message.Text
+				cnd.Check.Type = true
 			}
 
-			msg.Text = "Перечислите жанры через пробел (или /skip):"
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
-
+			msg.Text = qGenres
+			b.sendMsg(msg)
 			continue
 
-		} else if cnd.Genres == nil {
+		} else if !cnd.Check.Genres {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.Genres = []string{"no"}
+				cnd.Check.Genres = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				cnd.Genres = strings.Fields(update.Message.Text)
+				cnd.Check.Genres = true
 			}
 
-			msg.Text = `Укажите год начала поиска (минимум 1900) (или /skip):`
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
+			msg.Text = qYearsBeg
+			b.sendMsg(msg)
 			continue
 
-		} else if cnd.StartYear == "" {
+		} else if !cnd.Check.StartYear {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.StartYear = "no"
+				cnd.Check.StartYear = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				if !checkYear(update.Message.Text) {
-					msg.Text = "Неправильный формат или значение, попробуйте снова"
-					if _, err := b.tg.Send(msg); err != nil {
-						logrus.Error(sendMsgErr, err)
-					}
+					msg.Text = msgWrongFormat
+					b.sendMsg(msg)
 					continue
 				}
 				cnd.StartYear = update.Message.Text
+				cnd.Check.StartYear = true
 			}
 
-			msg.Text = fmt.Sprintf(
-				"Укажите год окончания поиска (максимум %d) (или /skip):", time.Now().Year()+1)
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
+			msg.Text = qYearsEnd
+			b.sendMsg(msg)
 			continue
 
-		} else if cnd.EndYear == "" {
+		} else if !cnd.Check.EndYear {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.EndYear = "no"
+				cnd.Check.EndYear = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				if !checkYear(update.Message.Text) {
-					msg.Text = "Неправильный формат или значение, попробуйте снова"
-					if _, err := b.tg.Send(msg); err != nil {
-						logrus.Error(sendMsgErr, err)
-					}
+					msg.Text = msgWrongFormat
+					b.sendMsg(msg)
 					continue
 				}
 
 				cnd.EndYear = update.Message.Text
+				cnd.Check.EndYear = true
 			}
 
-			msg.Text = "Укажите ключевые слова через пробел (например, название фильма или имя актера) (или /skip):"
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
+			msg.Text = qKeywords
+			b.sendMsg(msg)
 			continue
 
-		} else if cnd.Keyword == "" {
+		} else if !cnd.Check.Keyword {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.Keyword = "no"
+				cnd.Check.Keyword = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				cnd.Keyword = update.Message.Text
+				cnd.Check.Keyword = true
 			}
 
-			msg.Text = "Перечислите страны через пробел:"
-			if _, err := b.tg.Send(msg); err != nil {
-				logrus.Error(sendMsgErr, err)
-			}
+			msg.Text = qCountries
+			b.sendMsg(msg)
 			continue
 
-		} else if cnd.Countries == nil {
+		} else if !cnd.Check.Countries {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
 			switch update.Message.Command() {
 			case "skip":
-				cnd.Countries = []string{"no"}
+				cnd.Check.Countries = true
 				msg.Text = msgSkip
-				if _, err := b.tg.Send(msg); err != nil {
-					logrus.Error(sendMsgErr, err)
-				}
+				b.sendMsg(msg)
 			default:
 				cnd.Countries = strings.Fields(update.Message.Text)
+				cnd.Check.Countries = true
 			}
 			break
 
@@ -306,4 +289,10 @@ func checkYear(y string) bool {
 		return false
 	}
 	return true
+}
+
+func (b *QuinoaTgBot) sendMsg(msg tgbotapi.MessageConfig) {
+	if _, err := b.tg.Send(msg); err != nil {
+		logrus.Error(sendMsgErr, err)
+	}
 }

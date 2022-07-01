@@ -7,4 +7,14 @@ type Conditions struct {
 	EndYear   string
 	Countries []string
 	Keyword   string
+	Check     ConditionsCheck
+}
+
+type ConditionsCheck struct {
+	Type      bool
+	Genres    bool
+	StartYear bool
+	EndYear   bool
+	Countries bool
+	Keyword   bool
 }
