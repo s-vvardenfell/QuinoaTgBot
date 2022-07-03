@@ -13,8 +13,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-var ErrNoResults = errors.New("по вашему запросу не найдено подходящих результатов")
-var ErrSomeError = errors.New("во время обработки запроса произошла непредвиденная ошибка")
+var (
+	ErrNoResults   = errors.New("по вашему запросу не найдено подходящих результатов")
+	ErrSomeError   = errors.New("во время обработки запроса произошла непредвиденная ошибка")
+	contextTimeout = 600
+)
 
 type ParsingResults struct {
 	Name string
@@ -38,7 +41,7 @@ func New(host, port string) *QuinoaTgBotClient {
 
 func (c *QuinoaTgBotClient) FilmsByConditions(
 	cnd conditions.Conditions) ([]ParsingResults, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(contextTimeout)*time.Second)
 	defer cancel()
 
 	resFromServ, err := c.GetParsedData(ctx, &generated.Conditions{
@@ -51,7 +54,8 @@ func (c *QuinoaTgBotClient) FilmsByConditions(
 	})
 
 	if err != nil {
-		if strings.Contains(err.Error(), "no results found") {
+		if strings.Contains(err.Error(), "no results found") ||
+			strings.Contains(err.Error(), "no conditions") {
 			return nil, ErrNoResults
 		}
 		return nil, ErrSomeError

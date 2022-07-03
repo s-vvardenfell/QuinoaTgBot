@@ -29,8 +29,10 @@ const (
 	msgWrongCommand = "Я не знаю такой команды"
 )
 
-var qYearsEnd = fmt.Sprintf("Укажите год окончания поиска (максимум %d) (или /skip):", time.Now().Year()+1)
-var errBreak = errors.New("ок, прекращаю поиск")
+var (
+	qYearsEnd = fmt.Sprintf("Укажите год окончания поиска (максимум %d) (или /skip):", time.Now().Year()+1)
+	errBreak  = errors.New("ок, прекращаю поиск")
+)
 
 type QuinoaTgBot struct {
 	tg     *tgbotapi.BotAPI
