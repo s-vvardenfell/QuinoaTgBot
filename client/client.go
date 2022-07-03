@@ -11,12 +11,12 @@ import (
 	"github.com/s-vvardenfell/QuinoaTgBot/generated"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
-	ErrNoResults   = errors.New("по вашему запросу не найдено подходящих результатов")
-	ErrSomeError   = errors.New("во время обработки запроса произошла непредвиденная ошибка")
-	contextTimeout = 600
+	ErrNoResults = errors.New("по вашему запросу не найдено подходящих результатов")
+	ErrSomeError = errors.New("во время обработки запроса произошла непредвиденная ошибка")
 )
 
 type ParsingResults struct {
@@ -27,21 +27,25 @@ type ParsingResults struct {
 
 type QuinoaTgBotClient struct {
 	generated.MainServiceClient
+	timeout int
 }
 
-func New(host, port string) *QuinoaTgBotClient {
-	conn, err := grpc.Dial(fmt.Sprintf("%s:%s", host, port), grpc.WithInsecure())
+func New(host, port string, timeout int) *QuinoaTgBotClient {
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%s", host, port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		logrus.Fatalf("cannot connect to host< %s> and port <%s>: %v", host, port, err)
 	}
 	return &QuinoaTgBotClient{
 		generated.NewMainServiceClient(conn),
+		timeout,
 	}
 }
 
 func (c *QuinoaTgBotClient) FilmsByConditions(
 	cnd conditions.Conditions) ([]ParsingResults, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(contextTimeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(),
+		time.Duration(c.timeout)*time.Second)
 	defer cancel()
 
 	resFromServ, err := c.GetParsedData(ctx, &generated.Conditions{

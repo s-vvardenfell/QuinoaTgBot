@@ -20,8 +20,8 @@ var cnfg config.Config
 var rootCmd = &cobra.Command{
 	Use:   "QuinoaTgBot",
 	Short: "Telegram-bot for Quinoa project",
-	Long:  `Uses REST API to communicate with server`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logrus.Info("QuinoaTgBot started!")
 		b := bot.New(cnfg)
 		b.Work()
 	},
@@ -36,7 +36,8 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is resources/config.yml)")
+	rootCmd.PersistentFlags().StringVar(
+		&cfgFile, "config", "", "config file (default is resources/config.yml)")
 }
 
 func initConfig() {
