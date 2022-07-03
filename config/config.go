@@ -6,6 +6,7 @@ type Config struct {
 	Token      string `mapstructure:"token"`
 	Group      string `mapstructure:"group"`
 	Debug      bool   `mapstructure:"debug"`
+	Timeout    int    `mapstructure:"timeout"`
 	Logrus     Logrus `mapstructure:"logrus"`
 }
 

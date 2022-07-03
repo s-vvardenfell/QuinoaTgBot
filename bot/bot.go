@@ -49,7 +49,7 @@ func New(cnfg config.Config) *QuinoaTgBot {
 	bot.Debug = cnfg.Debug
 	return &QuinoaTgBot{
 		tg:     bot,
-		client: client.New(cnfg.ServerHost, cnfg.ServerPort),
+		client: client.New(cnfg.ServerHost, cnfg.ServerPort, cnfg.Timeout),
 		cnfg:   cnfg,
 	}
 }

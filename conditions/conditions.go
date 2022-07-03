@@ -10,6 +10,7 @@ type Conditions struct {
 	Check     ConditionsCheck
 }
 
+// используется для "опроса"
 type ConditionsCheck struct {
 	Type      bool
 	Genres    bool
